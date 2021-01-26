@@ -33,7 +33,7 @@ _logger = logging.getLogger(__name__)
 
 def _relative_path(base_dir, subdir_path, path_module):
     relative_path = path_module.relpath(subdir_path, base_dir)
-    return relative_path if relative_path is not '.' else None
+    return relative_path if relative_path != '.' else None
 
 
 def _relative_path_local(base_dir, subdir_path):
@@ -192,7 +192,7 @@ class DBArtifactRepository(ArtifactRepository):
                     session.add(artifact)
         session.flush()
 
-    def list_artifacts(self, path):
+    def list_artifacts(self, path=''):
         """
         Return all the artifacts for this run_id directly under path. If path is a file, returns
         an empty list. Will error if path is neither a file nor directory.
@@ -213,13 +213,15 @@ class DBArtifactRepository(ArtifactRepository):
                                 SqlArtifact.group_path == os.path.normpath(
                                     os.path.join(self.root, path))))]
         else:
-            regex = "%"
+            path = os.path.normpath('')
+            regex = os.path.join(path, '%')
             with self.ManagedSessionMaker() as session:
                 return [artifact.to_file_info(self.root)
                         for artifact in
                         session.query(SqlArtifact).filter(
-                            SqlArtifact.group_path.like(
-                                os.path.normpath(os.path.join(self.root, regex))))]
+                            or_(SqlArtifact.group_path.like(                                                                                                                                         os.path.normpath(os.path.join(self.root, regex))),                                                                                                             SqlArtifact.group_path == os.path.normpath(
+                                            os.path.join(self.root, path))))]
+
 
     def download_artifacts(self, artifact_path, dst_path=None):
         """
@@ -239,7 +241,6 @@ class DBArtifactRepository(ArtifactRepository):
 
         # TODO: Probably need to add a more efficient method to stream just a single artifact
         #       without downloading it, or to get a pre-signed URL for cloud storage.
-
         def download_artifacts_into(artifact_path, dest_dir):
             basename = os.path.basename(artifact_path)
             local_path = os.path.join(dest_dir, basename)
@@ -277,7 +278,6 @@ class DBArtifactRepository(ArtifactRepository):
                     "The destination path for downloaded artifacts must be a directory!"
                     " Destination path: {dst_path}".format(dst_path=dst_path)),
                 error_code=INVALID_PARAMETER_VALUE)
-
         return download_artifacts_into(artifact_path, dst_path)
 
     def _download_file(self, remote_file_path, local_path):
@@ -293,7 +293,7 @@ class DBArtifactRepository(ArtifactRepository):
         with self.ManagedSessionMaker() as session:
             contents = [(r.artifact_content, r.artifact_id) for r in
                         session.query(SqlArtifact.artifact_content, SqlArtifact.artifact_id).filter(
-                            SqlArtifact.group_path == os.path.join(self.root, group),
+                            SqlArtifact.group_path == os.path.normpath(os.path.join(self.root, group)),
                             SqlArtifact.artifact_name == file_name)]
             if len(contents) >= 1:
                 position = [y[1] for y in contents].index(max(contents)[1])
